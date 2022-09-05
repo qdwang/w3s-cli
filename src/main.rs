@@ -4,7 +4,7 @@ use clap::Parser;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute, ExecutableCommand};
-use std::io::stdout;
+use std::io::{stdout, Stdout};
 
 use std::{
     fs::{self, File},
@@ -14,18 +14,29 @@ use std::{
 use w3s::helper;
 
 mod args;
-use args::{CliArgs, Job};
+use args::*;
+
+fn print_cli_args(cli_args: &CliArgs, in_alter_screen: bool) -> Result<Stdout> {
+    let mut terminal = stdout();
+    if in_alter_screen {
+        execute!(
+            terminal,
+            EnterAlternateScreen,
+            cursor::MoveTo(0, 0),
+            Print(&cli_args),
+            cursor::MoveToPreviousLine(1),
+            cursor::SavePosition
+        )?;
+    } else {
+        execute!(terminal, Print(format!("{}\n", &cli_args)))?;
+    }
+
+    Ok(terminal)
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
-
-    execute!(
-        stdout(),
-        EnterAlternateScreen,
-        cursor::MoveTo(0, 0),
-        Print(&cli_args)
-    )?;
 
     let result = match cli_args.clone().job {
         Job::Remember(args) => {
@@ -33,20 +44,18 @@ async fn main() -> Result<()> {
             "".to_owned()
         }
         Job::UploadDir(args) => {
-            let results = upload_dir(&args.value, cli_args).await?;
+            let results = upload_dir(args, cli_args).await?;
             format!("Cid list: {:#?}", results)
         }
         Job::UploadFile(args) => {
-            let results = upload_file(&args.value, cli_args).await?;
+            let results = upload_file(args, cli_args).await?;
             format!("Cid list: {:#?}", results)
         }
         Job::DownloadFile(args) => {
-            download_file(&args.value, cli_args).await?;
+            download_file(args, cli_args).await?;
             "".to_owned()
         }
     };
-
-    stdout().execute(LeaveAlternateScreen).unwrap();
 
     println!("\n{result}\n=== DONE ===");
     Ok(())
@@ -81,80 +90,102 @@ fn get_token() -> Result<String> {
     }
 }
 
-async fn upload_dir(path: &str, mut cli_args: CliArgs) -> Result<Vec<String>> {
+fn get_progress_listener(mut terminal: Stdout) -> w3s::writer::uploader::ProgressListener {
+    Arc::new(Mutex::new(move |_, part, pos, total| {
+        let pos = Byte::from_bytes(pos as u128).get_appropriate_unit(true);
+        let total = Byte::from_bytes(total as u128).get_appropriate_unit(true);
+
+        execute!(
+            terminal,
+            cursor::RestorePosition,
+            cursor::MoveToNextLine(part as u16 + 1),
+            Clear(ClearType::CurrentLine),
+            Print(format!("part:{part} -> {pos}/{total}"))
+        )
+        .unwrap();
+    }))
+}
+
+async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>> {
+    let dir_path = &args.value;
+    let max_concurrent = args.max_concurrent;
+
     let token = get_token()?;
 
-    let mut terminal = stdout();
+    let terminal = print_cli_args(&cli_args, true)?;
 
     let results = helper::upload_dir(
-        path,
+        dir_path,
         None,
         token,
-        8,
-        Some(Arc::new(Mutex::new(move |_, part, pos, total| {
+        max_concurrent as usize,
+        Some(get_progress_listener(terminal)),
+        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        if cli_args.with_compression {
+            Some(None)
+        } else {
+            None
+        },
+    )
+    .await?;
+
+    stdout().execute(LeaveAlternateScreen).unwrap();
+
+    Ok(results.iter().map(|x| x.to_string()).collect())
+}
+
+async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>> {
+    let path = &args.value;
+    let max_concurrent = args.max_concurrent;
+
+    let token = get_token()?;
+
+    let terminal = print_cli_args(&cli_args, true)?;
+
+    let results = helper::upload(
+        path,
+        token,
+        max_concurrent as usize,
+        Some(get_progress_listener(terminal)),
+        Some(None),
+        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        if cli_args.with_compression {
+            Some(None)
+        } else {
+            None
+        },
+    )
+    .await?;
+
+    Ok(results.iter().map(|x| x.to_string()).collect())
+}
+
+async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
+    let url = &args.value;
+    let filename = args.get_target_filename();
+
+    let file = File::create(filename)?;
+
+    let mut terminal = print_cli_args(&cli_args, false)?;
+
+    helper::download(
+        url,
+        filename,
+        file,
+        Some(Arc::new(Mutex::new(move |_, _, pos, total| {
             let pos = Byte::from_bytes(pos as u128).get_appropriate_unit(true);
             let total = Byte::from_bytes(total as u128).get_appropriate_unit(true);
 
             execute!(
                 terminal,
-                cursor::MoveTo(0, part as u16 + 5),
+                cursor::MoveToPreviousLine(1),
                 Clear(ClearType::CurrentLine),
-                Print(format!("part:{part} -> {pos}/{total}"))
+                Print(format!("{pos}/{total}\n"))
             )
             .unwrap();
         }))),
-        cli_args
-            .with_encryption
-            .as_mut()
-            .map(|x| unsafe { x.as_bytes_mut() }),
-        if cli_args.with_compression {
-            Some(None)
-        } else {
-            None
-        },
-    )
-    .await?;
-
-    Ok(results.iter().map(|x| x.to_string()).collect())
-}
-
-async fn upload_file(path: &str, mut cli_args: CliArgs) -> Result<Vec<String>> {
-    let token = get_token()?;
-
-    let results = helper::upload(
-        path,
-        token,
-        4,
         None,
-        Some(None),
-        cli_args
-            .with_encryption
-            .as_mut()
-            .map(|x| unsafe { x.as_bytes_mut() }),
-        if cli_args.with_compression {
-            Some(None)
-        } else {
-            None
-        },
-    )
-    .await?;
-
-    Ok(results.iter().map(|x| x.to_string()).collect())
-}
-
-async fn download_file(path: &str, cli_args: CliArgs) -> Result<()> {
-    let name = path.split('/').last().unwrap_or("downloaded");
-    let file = File::open(name)?;
-
-    helper::download(
-        path,
-        name,
-        file,
-        None,
-        None,
-        cli_args
-            .with_encryption
-            .map(|x| x.as_bytes().iter().copied().collect::<Vec<_>>()),
+        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
         cli_args.with_compression,
     )
     .await?;

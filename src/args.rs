@@ -8,17 +8,56 @@ pub enum Job {
     /// Remember the web3.storage API token
     Remember(GeneralArgs),
     /// Upload a directory
-    UploadDir(GeneralArgs),
+    UploadDir(UploadArgs),
     /// Upload a file
-    UploadFile(GeneralArgs),
+    UploadFile(UploadArgs),
     /// Download a file from cid
-    DownloadFile(GeneralArgs),
+    DownloadFile(DownloadArgs),
 }
 
 #[derive(Args, Clone)]
 pub struct GeneralArgs {
     #[clap(value_parser)]
     pub value: String,
+}
+#[derive(Args, Clone)]
+pub struct UploadArgs {
+    #[clap(value_parser)]
+    pub value: String,
+    #[clap(short, long, value_parser, default_value_t = 1)]
+    pub max_concurrent: u8,
+}
+#[derive(Args, Clone)]
+pub struct DownloadArgs {
+    #[clap(value_parser)]
+    pub value: String,
+    #[clap(value_parser)]
+    pub to_file_name: Option<String>,
+}
+impl DownloadArgs {
+    pub fn get_target_filename(&self) -> &str {
+        if let Some(x) = self.to_file_name.as_ref() {
+            x.as_str()
+        } else {
+            self.value.split('/').last().unwrap_or("downloaded")
+        }
+    }
+}
+
+impl Display for GeneralArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+impl Display for UploadArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\n  max concurrent -> {}", self.value, self.max_concurrent)
+    }
+}
+impl Display for DownloadArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\n  save to file -> {}", self.value, self.get_target_filename())
+    }
 }
 
 #[derive(Parser, Clone)]
@@ -35,12 +74,6 @@ pub struct CliArgs {
     /// Upload/download with compression/decompression (useful for text contents)
     #[clap(short = 'c', long, action)]
     pub with_compression: bool,
-}
-
-impl Display for GeneralArgs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
 }
 
 impl Display for Job {
