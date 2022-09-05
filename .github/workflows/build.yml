@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  EXE_NAME: project_name
+  EXE_NAME: w3s
 
 jobs:
   Build_Win:
