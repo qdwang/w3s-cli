@@ -24,7 +24,7 @@ jobs:
       - name: Upload traget bin
         uses: actions/upload-artifact@v3
         with:
-          name: win
+          name: win.build
           path: target/release/${{ env.EXE_NAME }}.exe
 
 
@@ -42,12 +42,13 @@ jobs:
           cargo build -r
           cargo build -r --target aarch64-apple-darwin
           lipo -create -output ./${{ env.EXE_NAME }} ./target/release/${{ env.EXE_NAME }} ./target/aarch64-apple-darwin/release/${{ env.EXE_NAME }}
+          zip -9 ${{ env.EXE_NAME }}.zip ./${{ env.EXE_NAME }}
 
       - name: Upload traget bin
         uses: actions/upload-artifact@v3
         with:
-          name: macos
-          path: ./${{ env.EXE_NAME }}
+          name: macos.build
+          path: ./${{ env.EXE_NAME }}.zip
 
 
   Build_Linux:
@@ -59,10 +60,101 @@ jobs:
           fetch-depth: 0
 
       - name: Compile
-        run: cargo build -r
+        run: |
+          cargo build -r
+          cd target/release
+          zip -9 ${{ env.EXE_NAME }}.zip ./${{ env.EXE_NAME }}
 
       - name: Upload traget bin
         uses: actions/upload-artifact@v3
         with:
-          name: linux
-          path: target/release/${{ env.EXE_NAME }}
+          name: linux.build
+          path: target/release/${{ env.EXE_NAME }}.zip
+
+  Release:
+    needs: [Build_Win, Build_MacOS, Build_Linux]
+    runs-on: ubuntu-20.04
+    permissions: write-all
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Remove local nightly tag
+        run: git tag -d nightly || true
+
+      - name: Set variables
+        id: vars
+        run: |
+          echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+          echo "::set-output name=tag::$(git describe --tags HEAD)"
+
+      - name: Download previous builds
+        uses: actions/download-artifact@v2
+
+      - name: Extract artifacts
+        run: |
+          7z x *.build
+          mv win.build/* ./${{ env.EXE_NAME }}-win.exe
+          mv macos.build/* ./${{ env.EXE_NAME }}-macos.zip
+          mv linux.build/* ./${{ env.EXE_NAME }}-linux.zip
+
+      - name: Get packages file name
+        id: names
+        run: |
+          echo "::set-output name=win_build::${{ env.EXE_NAME }}-win.exe"
+          echo "::set-output name=macos_build::${{ env.EXE_NAME }}-macos.zip"
+          echo "::set-output name=linux_build::${{ env.EXE_NAME }}-linux.zip"
+
+      # Publish builds
+      - name: Remove nightly tag 
+        uses: dev-drprasad/delete-tag-and-release@v0.2.0
+        with:
+          delete_release: true
+          tag_name: nightly
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+
+      # Create nightly release as prerelease
+      - name: Create nightly prerelease
+        id: nightly_prerelease
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nightly
+          release_name: Nightly builds - ${{ steps.vars.outputs.sha_short }}
+          prerelease: true
+          draft: false
+          body: Automated builds for nightly prerelease via Github Actions
+
+      - name: Upload linux nightly build
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.nightly_prerelease.outputs.upload_url }}
+          asset_path: ${{ steps.names.outputs.linux_build }}
+          asset_name: ${{ steps.names.outputs.linux_build }}
+          asset_content_type: application/zip
+
+      - name: Upload win nightly build
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.nightly_prerelease.outputs.upload_url }}
+          asset_path: ${{ steps.names.outputs.win_build }}
+          asset_name: ${{ steps.names.outputs.win_build }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload macos nightly build
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.nightly_prerelease.outputs.upload_url }}
+          asset_path: ${{ steps.names.outputs.macos_build }}
+          asset_name: ${{ steps.names.outputs.macos_build }}
+          asset_content_type: application/zip
