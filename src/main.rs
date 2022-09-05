@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use byte_unit::Byte;
 use clap::Parser;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
@@ -34,6 +33,22 @@ fn print_cli_args(cli_args: &CliArgs, in_alter_screen: bool) -> Result<Stdout> {
     Ok(terminal)
 }
 
+fn print_byte_unit(x: usize) -> String {
+    if x < 1024 {
+        format!("{}B", x)
+    } else if x < 1024 * 1024 {
+        format!("{:.2}KiB", x as f64 / 1024.)
+    } else if x < 1024 * 1024 * 1024 {
+        format!("{:.2}MiB", x as f64 / 1024. / 1024.)
+    } else if x < 1024 * 1024 * 1024 * 1024 {
+        format!("{:.2}GiB", x as f64 / 1024. / 1024. / 1024.)
+    } else if x < 1024 * 1024 * 1024 * 1024 * 1024 {
+        format!("{:.2}TiB", x as f64 / 1024. / 1024. / 1024. / 1024.)
+    } else {
+        format!("{:.2}PiB", x as f64 / 1024. / 1024. / 1024. / 1024. / 1024.)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
@@ -57,7 +72,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    println!("\n{result}\n=== DONE ===");
+    println!("\n{result}");
     Ok(())
 }
 
@@ -92,8 +107,8 @@ fn get_token() -> Result<String> {
 
 fn get_progress_listener(mut terminal: Stdout) -> w3s::writer::uploader::ProgressListener {
     Arc::new(Mutex::new(move |_, part, pos, total| {
-        let pos = Byte::from_bytes(pos as u128).get_appropriate_unit(true);
-        let total = Byte::from_bytes(total as u128).get_appropriate_unit(true);
+        let pos = print_byte_unit(pos);
+        let total = print_byte_unit(total);
 
         execute!(
             terminal,
@@ -173,8 +188,8 @@ async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
         filename,
         file,
         Some(Arc::new(Mutex::new(move |_, _, pos, total| {
-            let pos = Byte::from_bytes(pos as u128).get_appropriate_unit(true);
-            let total = Byte::from_bytes(total as u128).get_appropriate_unit(true);
+            let pos = print_byte_unit(pos);
+            let total = print_byte_unit(total);
 
             execute!(
                 terminal,
