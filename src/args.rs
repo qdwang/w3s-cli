@@ -11,7 +11,7 @@ pub enum Job {
     UploadDir(UploadArgs),
     /// Upload a file
     UploadFile(UploadArgs),
-    /// Download a file from cid
+    /// Download a file from IPFS gateway
     DownloadFile(DownloadArgs),
 }
 
@@ -67,11 +67,11 @@ pub struct CliArgs {
     #[clap(subcommand)]
     pub job: Job,
 
-    /// Upload/download with encryption/decryption
-    #[clap(short = 'e', long)]
+    /// Work with encryption/decryption
+    #[clap(short = 'e', long, id = "PASSWORD")]
     pub with_encryption: Option<String>,
 
-    /// Upload/download with compression/decompression (useful for text contents)
+    /// Work with compression/decompression
     #[clap(short = 'c', long, action)]
     pub with_compression: bool,
 }
