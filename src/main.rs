@@ -3,6 +3,7 @@ use clap::Parser;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute, ExecutableCommand};
+use std::collections::VecDeque;
 use std::io::{stdout, Stdout};
 
 use std::{
@@ -34,19 +35,15 @@ fn print_cli_args(cli_args: &CliArgs, in_alter_screen: bool) -> Result<Stdout> {
 }
 
 fn print_byte_unit(x: usize) -> String {
-    if x < 1024 {
-        format!("{}B", x)
-    } else if x < 1024 * 1024 {
-        format!("{:.2}KiB", x as f64 / 1024.)
-    } else if x < 1024 * 1024 * 1024 {
-        format!("{:.2}MiB", x as f64 / 1024. / 1024.)
-    } else if x < 1024 * 1024 * 1024 * 1024 {
-        format!("{:.2}GiB", x as f64 / 1024. / 1024. / 1024.)
-    } else if x < 1024 * 1024 * 1024 * 1024 * 1024 {
-        format!("{:.2}TiB", x as f64 / 1024. / 1024. / 1024. / 1024.)
-    } else {
-        format!("{:.2}PiB", x as f64 / 1024. / 1024. / 1024. / 1024. / 1024.)
+    let mut suffix = VecDeque::from(["B", "KiB", "MiB", "GiB", "TiB", "PiB"]);
+
+    let mut x = x as f32;
+    while x >= 1024. {
+        suffix.pop_front();
+        x /= 1024.;
     }
+
+    format!("{:.2}{}", x, suffix.pop_front().unwrap_or(&">PiB"))
 }
 
 #[tokio::main]
