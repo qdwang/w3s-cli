@@ -12,6 +12,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use w3s::helper;
+use w3s::writer::car_util;
 
 mod args;
 use args::*;
@@ -50,26 +51,25 @@ fn print_byte_unit(x: usize) -> String {
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
-    let result = match cli_args.clone().job {
+    let (result, has_empty_cid) = match cli_args.clone().job {
         Job::Remember(args) => {
             remember_credential(&args.value)?;
-            "".to_owned()
+            (vec![], None)
         }
-        Job::UploadDir(args) => {
-            let results = upload_dir(args, cli_args).await?;
-            format!("Cid list: {:#?}", results)
-        }
-        Job::UploadFile(args) => {
-            let results = upload_file(args, cli_args).await?;
-            format!("Cid list: {:#?}", results)
-        }
+        Job::UploadDir(args) => upload_dir(args, cli_args).await?,
+        Job::UploadFile(args) => upload_file(args, cli_args).await?,
         Job::DownloadFile(args) => {
             download_file(args, cli_args).await?;
-            "".to_owned()
+            (vec![], None)
         }
     };
 
-    println!("\n{result}");
+    println!("\n{:#?}", result);
+
+    if let Some(cid) = has_empty_cid {
+        println!("\nThis cid({cid}) is temporarily used for streaming uploads and you can delete it from the web3.storage project list page.");
+    }
+
     Ok(())
 }
 
@@ -118,7 +118,7 @@ fn get_progress_listener(mut terminal: Stdout) -> w3s::writer::uploader::Progres
     }))
 }
 
-async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>> {
+async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>, Option<String>)> {
     let dir_path = &args.value;
     let max_concurrent = args.max_concurrent;
 
@@ -143,10 +143,14 @@ async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>> 
 
     stdout().execute(LeaveAlternateScreen).unwrap();
 
-    Ok(results.iter().map(|x| x.to_string()).collect())
+    let cid_string_lst = results.iter().map(|x| x.to_string()).collect();
+    Ok((
+        cid_string_lst,
+        car_util::find_empty_item(&results).map(|x| x.to_string()),
+    ))
 }
 
-async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>> {
+async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>, Option<String>)> {
     let path = &args.value;
     let max_concurrent = args.max_concurrent;
 
@@ -169,7 +173,11 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<Vec<String>>
     )
     .await?;
 
-    Ok(results.iter().map(|x| x.to_string()).collect())
+    let cid_string_lst = results.iter().map(|x| x.to_string()).collect();
+    Ok((
+        cid_string_lst,
+        car_util::find_empty_item(&results).map(|x| x.to_string()),
+    ))
 }
 
 async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
