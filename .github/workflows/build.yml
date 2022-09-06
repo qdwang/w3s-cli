@@ -44,6 +44,27 @@ jobs:
           lipo -create -output ./${{ env.EXE_NAME }} ./target/release/${{ env.EXE_NAME }} ./target/aarch64-apple-darwin/release/${{ env.EXE_NAME }}
           zip -9 ${{ env.EXE_NAME }}.zip ./${{ env.EXE_NAME }}
 
+      - name: Codesign for macos build
+        env: 
+          MACOS_CERT: ${{ secrets.MACOS_CERT }}
+          MACOS_CERT_PWD: ${{ secrets.MACOS_CERT_PWD }}
+          KEY_PWD: ${{ secrets.APPLEID_APP_PWD }}
+          APPLEID_APP_PWD: ${{ secrets.APPLEID_APP_PWD }}
+          WWDRTEAMID: ${{ secrets.WWDRTEAMID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+        if: ${{ env.APPLE_ID != '' }}
+        run: |
+          echo "$MACOS_CERT" | base64 -d > certificate.p12
+          security create-keychain -p "$KEY_PWD" build.keychain 
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEY_PWD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERT_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEY_PWD" build.keychain
+          codesign --options runtime --force --deep --sign "$WWDRTEAMID" ${{ env.EXE_NAME }}
+          
+          xcrun notarytool store-credentials "OLG" --apple-id "$APPLE_ID" --team-id "$WWDRTEAMID" --password "$APPLEID_APP_PWD"
+          xcrun notarytool submit ${{ env.EXE_NAME }}.zip --keychain-profile "OLG" --wait
+
       - name: Upload traget bin
         uses: actions/upload-artifact@v3
         with:
