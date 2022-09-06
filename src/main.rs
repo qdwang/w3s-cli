@@ -175,6 +175,8 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
     )
     .await?;
 
+    stdout().execute(LeaveAlternateScreen).unwrap();
+
     let cid_string_lst = results.iter().map(|x| x.to_string()).collect();
     Ok((
         cid_string_lst,
