@@ -51,7 +51,7 @@ fn print_byte_unit(x: usize) -> String {
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
-    let (result, has_empty_cid) = match cli_args.clone().job {
+    let (results, has_empty_cid) = match cli_args.clone().job {
         Job::Remember(args) => {
             remember_credential(&args.value)?;
             (vec![], None)
@@ -64,10 +64,12 @@ async fn main() -> Result<()> {
         }
     };
 
-    println!("\n{:#?}", result);
+    if !results.is_empty() {
+        println!("\n{:#?}", results);
 
-    if let Some(cid) = has_empty_cid {
-        println!("\nThis cid({cid}) is temporarily used for streaming uploads and you can delete it from the web3.storage project list page.");
+        if let Some(cid) = has_empty_cid {
+            println!("\nThis cid({cid}) is temporarily used for streaming uploads and you can delete it from the web3.storage project list page.");
+        }
     }
 
     Ok(())
