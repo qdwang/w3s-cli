@@ -13,6 +13,8 @@ pub enum Job {
     UploadFile(UploadArgs),
     /// Download a file from IPFS gateway
     DownloadFile(DownloadArgs),
+    /// Download a directory from IPFS gateway
+    DownloadDir(DownloadArgs),
 }
 
 #[derive(Args, Clone)]
@@ -32,11 +34,11 @@ pub struct DownloadArgs {
     #[clap(value_parser)]
     pub value: String,
     #[clap(value_parser)]
-    pub to_file_name: Option<String>,
+    pub to_path: Option<String>,
 }
 impl DownloadArgs {
     pub fn get_target_filename(&self) -> &str {
-        if let Some(x) = self.to_file_name.as_ref() {
+        if let Some(x) = self.to_path.as_ref() {
             x.as_str()
         } else {
             self.value.split('/').last().unwrap_or("downloaded")
@@ -51,12 +53,21 @@ impl Display for GeneralArgs {
 }
 impl Display for UploadArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\n  max concurrent -> {}", self.value, self.max_concurrent)
+        write!(
+            f,
+            "{}\n  max concurrent -> {}",
+            self.value, self.max_concurrent
+        )
     }
 }
 impl Display for DownloadArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\n  save to file -> {}", self.value, self.get_target_filename())
+        write!(
+            f,
+            "{}\n  save to file -> {}",
+            self.value,
+            self.get_target_filename()
+        )
     }
 }
 
@@ -83,7 +94,14 @@ impl Display for Job {
             "{}",
             match self {
                 Job::Remember(args) => format!("Remember API token: {}", args),
-                Job::DownloadFile(args) => format!("Download file from: {}", args),
+                Job::DownloadDir(args) => format!(
+                    "Download directory from: {}\n  save to folder -> {}",
+                    args.value,
+                    args.to_path
+                        .as_ref()
+                        .unwrap_or(&"w3s_downloaded".to_owned())
+                ),
+                Job::DownloadFile(args) => format!("Download file form: {}", args),
                 Job::UploadDir(args) => format!("Upload this directory: {}", args),
                 Job::UploadFile(args) => format!("Upload this file: {}", args),
             }

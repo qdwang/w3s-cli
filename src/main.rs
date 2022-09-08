@@ -62,6 +62,10 @@ async fn main() -> Result<()> {
             download_file(args, cli_args).await?;
             (vec![], None)
         }
+        Job::DownloadDir(args) => {
+            download_dir(args, cli_args).await?;
+            (vec![], None)
+        }
     };
 
     if !results.is_empty() {
@@ -184,6 +188,42 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
     ))
 }
 
+async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
+    let url = &args.value;
+    let dir_path = args.to_path.unwrap_or("w3s_downloaded".to_owned());
+
+    let mut terminal = print_cli_args(&cli_args, false)?;
+    let mut donwloading_name = Arc::new("".to_owned());
+
+    helper::download_dir(
+        url,
+        &dir_path,
+        Some(|url, status| println!("checked: {url} -> {status}\n")),
+        Some(Arc::new(Mutex::new(move |name, _, pos, total| {
+            let pos = print_byte_unit(pos);
+            let total = print_byte_unit(total);
+
+            if donwloading_name != name {
+                println!();
+                donwloading_name = name.clone();
+            }
+
+            execute!(
+                terminal,
+                cursor::MoveToPreviousLine(1),
+                Clear(ClearType::CurrentLine),
+                Print(format!("[{pos}/{total}] {name}\n"))
+            )
+            .unwrap();
+        }))),
+        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        cli_args.with_compression,
+    )
+    .await?;
+
+    Ok(())
+}
+
 async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
     let url = &args.value;
     let filename = args.get_target_filename();
@@ -196,7 +236,7 @@ async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
         url,
         filename,
         file,
-        Some(Arc::new(Mutex::new(move |_, _, pos, total| {
+        Some(Arc::new(Mutex::new(move |name, _, pos, total| {
             let pos = print_byte_unit(pos);
             let total = print_byte_unit(total);
 
@@ -204,7 +244,7 @@ async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
                 terminal,
                 cursor::MoveToPreviousLine(1),
                 Clear(ClearType::CurrentLine),
-                Print(format!("{pos}/{total}\n"))
+                Print(format!("[{pos}/{total}] {name}\n"))
             )
             .unwrap();
         }))),
