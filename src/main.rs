@@ -193,7 +193,7 @@ async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
     let dir_path = args.to_path.unwrap_or("w3s_downloaded".to_owned());
 
     let mut terminal = print_cli_args(&cli_args, false)?;
-    let mut donwloading_name = Arc::new("".to_owned());
+    let mut downloading_name = Arc::new("".to_owned());
 
     helper::download_dir(
         url,
@@ -203,9 +203,9 @@ async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
             let pos = print_byte_unit(pos);
             let total = print_byte_unit(total);
 
-            if donwloading_name != name {
+            if downloading_name != name {
                 println!();
-                donwloading_name = name.clone();
+                downloading_name = name.clone();
             }
 
             execute!(
