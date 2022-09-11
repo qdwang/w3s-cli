@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use crossterm::style::Print;
-use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::{cursor, execute, ExecutableCommand};
-use std::collections::VecDeque;
-use std::io::{stdout, Stdout};
+use crossterm::terminal::{Clear, ClearType};
+use crossterm::{cursor, execute};
+use std::collections::{HashMap, VecDeque};
+use std::io::stdout;
 
 use std::{
     fs::{self, File},
@@ -17,24 +17,6 @@ use w3s::writer::car_util;
 mod args;
 use args::*;
 
-fn print_cli_args(cli_args: &CliArgs, in_alter_screen: bool) -> Result<Stdout> {
-    let mut terminal = stdout();
-    if in_alter_screen {
-        execute!(
-            terminal,
-            EnterAlternateScreen,
-            cursor::MoveTo(0, 0),
-            Print(&cli_args),
-            cursor::MoveToPreviousLine(1),
-            cursor::SavePosition
-        )?;
-    } else {
-        execute!(terminal, Print(format!("{}\n", &cli_args)))?;
-    }
-
-    Ok(terminal)
-}
-
 fn print_byte_unit(x: usize) -> String {
     let mut suffix = VecDeque::from(["B", "KiB", "MiB", "GiB", "TiB", "PiB"]);
 
@@ -44,12 +26,14 @@ fn print_byte_unit(x: usize) -> String {
         x /= 1024.;
     }
 
-    format!("{:.2}{}", x, suffix.pop_front().unwrap_or(&">PiB"))
+    format!("{:.3}{}", x, suffix.pop_front().unwrap_or(">PiB"))
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
+
+    println!("{}", &cli_args);
 
     let (results, has_empty_cid) = match cli_args.clone().job {
         Job::Remember(args) => {
@@ -108,19 +92,48 @@ fn get_token() -> Result<String> {
     }
 }
 
-fn get_progress_listener(mut terminal: Stdout) -> w3s::writer::uploader::ProgressListener {
+fn get_progress_listener() -> w3s::writer::uploader::ProgressListener {
+    let mut terminal = stdout();
+    let mut parts: HashMap<usize, (usize, usize, bool)> = HashMap::new();
+
     Arc::new(Mutex::new(move |_, part, pos, total| {
-        let pos = print_byte_unit(pos);
-        let total = print_byte_unit(total);
+        parts.insert(part, (pos, total, false));
+
+        let mut part_display_lst = Vec::with_capacity(32);
+        let mut sum_pos = 0;
+        let mut sum_total = 0;
+
+        for (part, (pos, total, is_finished)) in parts.iter() {
+            if !is_finished {
+                part_display_lst.push(part);
+            }
+            sum_pos += pos;
+            sum_total += total;
+        }
+
+        part_display_lst.sort();
+
+        let content = format!(
+            "[{}/{}] {}\n",
+            print_byte_unit(sum_pos),
+            print_byte_unit(sum_total),
+            part_display_lst
+                .iter()
+                .map(|x| format!("{x} "))
+                .collect::<String>()
+        );
 
         execute!(
             terminal,
-            cursor::RestorePosition,
-            cursor::MoveToNextLine(part as u16 + 1),
+            cursor::MoveToPreviousLine(1),
             Clear(ClearType::CurrentLine),
-            Print(format!("part:{part} -> {pos}/{total}"))
+            Print(content)
         )
         .unwrap();
+
+        if pos == total {
+            parts.insert(part, (pos, total, true));
+        }
     }))
 }
 
@@ -130,14 +143,12 @@ async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>,
 
     let token = get_token()?;
 
-    let terminal = print_cli_args(&cli_args, true)?;
-
     let results = helper::upload_dir(
         dir_path,
         None,
         token,
         max_concurrent as usize,
-        Some(get_progress_listener(terminal)),
+        Some(get_progress_listener()),
         cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
         if cli_args.with_compression {
             Some(None)
@@ -146,8 +157,6 @@ async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>,
         },
     )
     .await?;
-
-    stdout().execute(LeaveAlternateScreen).unwrap();
 
     let cid_string_lst = results.iter().map(|x| x.to_string()).collect();
     Ok((
@@ -162,13 +171,11 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
 
     let token = get_token()?;
 
-    let terminal = print_cli_args(&cli_args, true)?;
-
     let results = helper::upload(
         path,
         token,
         max_concurrent as usize,
-        Some(get_progress_listener(terminal)),
+        Some(get_progress_listener()),
         Some(None),
         cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
         if cli_args.with_compression {
@@ -179,8 +186,6 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
     )
     .await?;
 
-    stdout().execute(LeaveAlternateScreen).unwrap();
-
     let cid_string_lst = results.iter().map(|x| x.to_string()).collect();
     Ok((
         cid_string_lst,
@@ -190,9 +195,9 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
 
 async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
     let url = &args.value;
-    let dir_path = args.to_path.unwrap_or("w3s_downloaded".to_owned());
+    let dir_path = args.to_path.unwrap_or_else(|| "w3s_downloaded".to_owned());
 
-    let mut terminal = print_cli_args(&cli_args, false)?;
+    let mut terminal = stdout();
     let mut downloading_name = Arc::new("".to_owned());
 
     helper::download_dir(
@@ -230,7 +235,7 @@ async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
 
     let file = File::create(filename)?;
 
-    let mut terminal = print_cli_args(&cli_args, false)?;
+    let mut terminal = stdout();
 
     helper::download(
         url,
