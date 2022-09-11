@@ -26,7 +26,7 @@ pub struct GeneralArgs {
 pub struct UploadArgs {
     #[clap(value_parser)]
     pub value: String,
-    #[clap(short, long, value_parser, default_value_t = 1)]
+    #[clap(short, long, value_parser = clap::value_parser!(u8).range(1..=16), default_value_t = 1)]
     pub max_concurrent: u8,
 }
 #[derive(Args, Clone)]
