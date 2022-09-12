@@ -1,6 +1,6 @@
 [package]
 name = "w3s"
-version = "0.1.4"
+version = "0.1.5"
 description = "A easy tool to upload file or directory to web3.storage with optional encryption and compression"
 authors = ["qdwang"]
 edition = "2021"
