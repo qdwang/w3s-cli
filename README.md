@@ -1,5 +1,5 @@
 # w3s-cli 
-[![release](https://img.shields.io/github/v/release/qdwang/w3s-cli?include_prereleases&style=flat-square)](https://github.com/qdwang/w3s-cli/releases/latest)
+[![release](https://img.shields.io/github/v/release/qdwang/w3s-cli?style=flat-square)](https://github.com/qdwang/w3s-cli/releases/latest)
 
 A simple command line program to upload file or directory to web3.storage with optional encryption and compression. 
 
@@ -10,13 +10,12 @@ A simple command line program to upload file or directory to web3.storage with o
 * Uploads single file to web3.storage
 * Uploads entire directory recursively to web3.storage
 * Uploads with optional encryption and compression
-* Encryption and compression during uploading without pre process needed
+* Encryption and compression during upload, no pre-processing required
 ---
 * Downloads single file from IPFS gateway
 * Downloads entire directory recursively from IPFS gateway
 * Downloads with optional decryption and decompression
-* Encryption and compression during downloading without after process needed
-
+* Decryption and decompression during download, no post-processing required
 
 ## Preparation
 1. Sign in [https://web3.storage/](https://web3.storage/#).
