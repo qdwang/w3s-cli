@@ -34,9 +34,20 @@ async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
     let with_encryption = if cli_args.with_encryption {
-        println!("input password: ");
-        let pwd = rpassword::read_password()?;
-        Some(pwd.as_bytes().to_vec())
+        fn input_password() -> Result<String> {
+            println!("Input password: ");
+            let pwd = rpassword::read_password()?;
+            println!("Input password again: ");
+            let pwd2 = rpassword::read_password()?;
+            if pwd == pwd2 {
+                Ok(pwd)
+            } else {
+                println!("Two passwords do not match.\n");
+                input_password()
+            }
+        }
+
+        Some(input_password()?.as_bytes().to_vec())
     } else {
         None
     };
