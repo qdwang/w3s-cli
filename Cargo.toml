@@ -13,6 +13,7 @@ anyhow = "1"
 tokio = { version = "1", features = ["macros"] }
 dirs = "4"
 crossterm = "0.25.0"
+rpassword = "7"
 
 [profile.release]
 codegen-units = 1
