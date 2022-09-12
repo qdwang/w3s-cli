@@ -33,6 +33,14 @@ fn print_byte_unit(x: usize) -> String {
 async fn main() -> Result<()> {
     let cli_args = CliArgs::parse();
 
+    let with_encryption = if cli_args.with_encryption {
+        println!("input password: ");
+        let pwd = rpassword::read_password()?;
+        Some(pwd.as_bytes().to_vec())
+    } else {
+        None
+    };
+
     println!("{}", &cli_args);
 
     let (results, has_empty_cid) = match cli_args.clone().job {
@@ -40,14 +48,14 @@ async fn main() -> Result<()> {
             remember_credential(&args.value)?;
             (vec![], None)
         }
-        Job::UploadDir(args) => upload_dir(args, cli_args).await?,
-        Job::UploadFile(args) => upload_file(args, cli_args).await?,
+        Job::UploadDir(args) => upload_dir(args, cli_args, with_encryption).await?,
+        Job::UploadFile(args) => upload_file(args, cli_args, with_encryption).await?,
         Job::DownloadFile(args) => {
-            download_file(args, cli_args).await?;
+            download_file(args, cli_args, with_encryption).await?;
             (vec![], None)
         }
         Job::DownloadDir(args) => {
-            download_dir(args, cli_args).await?;
+            download_dir(args, cli_args, with_encryption).await?;
             (vec![], None)
         }
     };
@@ -137,7 +145,11 @@ fn get_progress_listener() -> w3s::writer::uploader::ProgressListener {
     }))
 }
 
-async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>, Option<String>)> {
+async fn upload_dir(
+    args: UploadArgs,
+    cli_args: CliArgs,
+    with_encryption: Option<Vec<u8>>,
+) -> Result<(Vec<String>, Option<String>)> {
     let dir_path = &args.value;
     let max_concurrent = args.max_concurrent;
 
@@ -149,7 +161,7 @@ async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>,
         token,
         max_concurrent as usize,
         Some(get_progress_listener()),
-        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        with_encryption,
         if cli_args.with_compression {
             Some(None)
         } else {
@@ -165,7 +177,11 @@ async fn upload_dir(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>,
     ))
 }
 
-async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>, Option<String>)> {
+async fn upload_file(
+    args: UploadArgs,
+    cli_args: CliArgs,
+    with_encryption: Option<Vec<u8>>,
+) -> Result<(Vec<String>, Option<String>)> {
     let path = &args.value;
     let max_concurrent = args.max_concurrent;
 
@@ -177,7 +193,7 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
         max_concurrent as usize,
         Some(get_progress_listener()),
         Some(None),
-        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        with_encryption,
         if cli_args.with_compression {
             Some(None)
         } else {
@@ -193,7 +209,11 @@ async fn upload_file(args: UploadArgs, cli_args: CliArgs) -> Result<(Vec<String>
     ))
 }
 
-async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
+async fn download_dir(
+    args: DownloadArgs,
+    cli_args: CliArgs,
+    with_encryption: Option<Vec<u8>>,
+) -> Result<()> {
     let url = &args.value;
     let dir_path = args.to_path.unwrap_or_else(|| "w3s_downloaded".to_owned());
 
@@ -221,7 +241,7 @@ async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
             )
             .unwrap();
         }))),
-        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        with_encryption,
         cli_args.with_compression,
     )
     .await?;
@@ -229,7 +249,11 @@ async fn download_dir(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
     Ok(())
 }
 
-async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
+async fn download_file(
+    args: DownloadArgs,
+    cli_args: CliArgs,
+    with_encryption: Option<Vec<u8>>,
+) -> Result<()> {
     let url = &args.value;
     let filename = args.get_target_filename();
 
@@ -254,7 +278,7 @@ async fn download_file(args: DownloadArgs, cli_args: CliArgs) -> Result<()> {
             .unwrap();
         }))),
         None,
-        cli_args.with_encryption.map(|x| x.as_bytes().to_vec()),
+        with_encryption,
         cli_args.with_compression,
     )
     .await?;

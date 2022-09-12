@@ -79,8 +79,8 @@ pub struct CliArgs {
     pub job: Job,
 
     /// Work with encryption/decryption
-    #[clap(short = 'e', long, id = "PASSWORD")]
-    pub with_encryption: Option<String>,
+    #[clap(short = 'e', long, action)]
+    pub with_encryption: bool,
 
     /// Work with compression/decompression
     #[clap(short = 'c', long, action)]
@@ -121,10 +121,7 @@ impl Display for CliArgs {
             "Arguments used:\n  Job -> {}\n  {} -> {}\n  {} -> {}\n\n",
             self.job,
             enc_label,
-            match self.with_encryption.as_ref() {
-                Some(pwd) => format!("password length: {}", pwd.len()),
-                None => "false".to_owned(),
-            },
+            self.with_encryption,
             comp_lebel,
             self.with_compression
         )
